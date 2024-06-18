@@ -2,6 +2,7 @@ import logging
 import sqlite3
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+from flask import Flask, request, jsonify
 
 # Replace with your Telegram bot token
 TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
@@ -82,15 +83,30 @@ def download_photos(chat_id, username, num_photos):
 
 # Main function to start the bot
 def main():
-    updater = Updater(TELEGRAM_BOT_TOKEN)
-    dispatcher = updater.dispatcher
+    # Set up webhook
+    app = Flask(__name__)
 
+    @app.route(f'/{TELEGRAM_BOT_TOKEN}', methods=['POST'])
+    def webhook():
+        update = Update.de_json(request.get_json(force=True), bot)
+        dispatcher.process_update(update)
+        return 'ok'
+
+    # Initialize bot and dispatcher
+    bot = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
+    dispatcher = bot.dispatcher
+
+    # Add handlers
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, process_username))
     dispatcher.add_handler(CallbackQueryHandler(button_click))
 
-    updater.start_polling()
-    updater.idle()
+    # Start webhook
+    bot.start_webhook(listen='0.0.0.0', port=8443, url_path=TELEGRAM_BOT_TOKEN)
+    bot.bot.set_webhook(f'https://your_domain.com/{TELEGRAM_BOT_TOKEN}')
+
+    # Run Flask app
+    app.run(port=8443)
 
 if __name__ == '__main__':
     main()
