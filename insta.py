@@ -104,7 +104,7 @@ def main():
 
     # Start webhook
     bot.start_webhook(listen='0.0.0.0', port=8443, url_path=TELEGRAM_BOT_TOKEN)
-    bot.bot.set_webhook(f'https://your_domain.com/{TELEGRAM_BOT_TOKEN}')
+    bot.bot.set_webhook(f'https://insta-upload-downloader.onrender.com/{TELEGRAM_BOT_TOKEN}')
 
     # Run Flask app
     app.run(port=8443)
