@@ -3,8 +3,7 @@ import sqlite3
 import os
 from flask import Flask, request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackContext, CallbackQueryHandler
-from telegram.ext.filters import Filters  # Correct import for Filters
+from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackContext, CallbackQueryHandler, Filters
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -115,7 +114,7 @@ def main():
     updater.start_webhook(listen='0.0.0.0',
                           port=8443,
                           url_path=TELEGRAM_BOT_TOKEN)
-    updater.bot.set_webhook(f'https://insta-upload-downloader.onrender.com/{TELEGRAM_BOT_TOKEN}')
+    updater.bot.set_webhook(f'https://your_domain.com/{TELEGRAM_BOT_TOKEN}')
 
     # Run Flask app
     app.run(port=8443)
