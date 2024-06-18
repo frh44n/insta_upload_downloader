@@ -3,7 +3,8 @@ import sqlite3
 import os
 from flask import Flask, request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackContext, CallbackQueryHandler
+from telegram.ext.filters import Filters  # Correct import for Filters
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
