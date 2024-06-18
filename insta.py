@@ -1,17 +1,23 @@
 import logging
 import sqlite3
+import os
+from flask import Flask, request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+from dotenv import load_dotenv
 
-# Replace with your Telegram bot token
-TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
+# Load environment variables from .env file
+load_dotenv()
+
+# Replace with your Telegram bot token from .env file
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # Setup logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize SQLite database
-conn = sqlite3.connect('user_data.db')
+conn = sqlite3.connect('user_data.db', check_same_thread=False)
 c = conn.cursor()
 
 # Create table if not exists
@@ -21,7 +27,10 @@ conn.commit()
 
 # Function to check if Instagram account exists and its privacy status
 def check_instagram_account(username):
-    # Implement as before
+    # Placeholder function
+    # You need to implement this function to check the Instagram account status
+    # For now, let's assume it always returns 'public'
+    return 'public'
 
 # Command handler for /start
 def start(update: Update, context: CallbackContext) -> None:
@@ -78,19 +87,37 @@ def button_click(update: Update, context: CallbackContext) -> None:
 
 # Function to download photos
 def download_photos(chat_id, username, num_photos):
-    # Implement as before
+    # Placeholder function
+    # You need to implement this function to download photos from Instagram
+    pass
 
-# Main function to start the bot
+# Initialize Flask app
+app = Flask(__name__)
+
+@app.route(f'/{TELEGRAM_BOT_TOKEN}', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    dispatcher.process_update(update)
+    return 'ok'
+
 def main():
-    updater = Updater(TELEGRAM_BOT_TOKEN)
+    # Set up webhook
+    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dispatcher = updater.dispatcher
 
+    # Add handlers
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, process_username))
     dispatcher.add_handler(CallbackQueryHandler(button_click))
 
-    updater.start_polling()
-    updater.idle()
+    # Start webhook
+    updater.start_webhook(listen='0.0.0.0',
+                          port=8443,
+                          url_path=TELEGRAM_BOT_TOKEN)
+    updater.bot.set_webhook(f'https://your_domain.com/{TELEGRAM_BOT_TOKEN}')
+
+    # Run Flask app
+    app.run(port=8443)
 
 if __name__ == '__main__':
     main()
