@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 import os
+import requests
 from flask import Flask, request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, CallbackQueryHandler, filters
@@ -22,7 +23,7 @@ c = conn.cursor()
 
 # Create table if not exists
 c.execute('''CREATE TABLE IF NOT EXISTS users
-             (chat_id INTEGER PRIMARY KEY, username TEXT, total_photos_downloaded INTEGER)''')
+             (chatid INTEGER PRIMARY KEY, update INTEGER, downloaded_photo INTEGER)''')
 conn.commit()
 
 # Function to check if Instagram account exists and its privacy status
@@ -35,14 +36,28 @@ def check_instagram_account(username):
 # Command handler for /start
 async def start(update: Update, context: CallbackContext) -> None:
     chat_id = update.message.chat_id
-    context.user_data['username'] = None
-    context.user_data['total_photos_downloaded'] = 0
+
+    # Check if user is already in the database
+    c.execute('SELECT update, downloaded_photo FROM users WHERE chatid = ?', (chat_id,))
+    user = c.fetchone()
+
+    if user is None:
+        # Add new user to the database
+        c.execute('INSERT INTO users (chatid, update, downloaded_photo) VALUES (?, ?, ?)', (chat_id, 0, 0))
+        conn.commit()
+        user_update = 0
+        downloaded_photo = 0
+    else:
+        user_update = user[0]
+        downloaded_photo = user[1]
+
+    context.user_data['update'] = user_update
+    context.user_data['downloaded_photo'] = downloaded_photo
 
     await update.message.reply_text('Enter Instagram username:')
 
 # Message handler to process Instagram username input
 async def process_username(update: Update, context: CallbackContext) -> None:
-    chat_id = update.message.chat_id
     username = update.message.text.strip()
 
     # Check Instagram account details
@@ -73,23 +88,41 @@ def create_inline_keyboard() -> InlineKeyboardMarkup:
 async def button_click(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     selected_option = int(query.data)
-
     chat_id = query.message.chat_id
-    username = context.user_data['username']
-    total_photos_downloaded = context.user_data['total_photos_downloaded']
 
-    if total_photos_downloaded >= 50:
+    # Get the user data from the database
+    c.execute('SELECT update, downloaded_photo FROM users WHERE chatid = ?', (chat_id,))
+    user = c.fetchone()
+    user_update = user[0]
+    downloaded_photo = user[1]
+
+    if downloaded_photo + selected_option > 50:
         await query.answer()
         await query.message.reply_text('Limit exhausted. Please buy premium to download more.')
     else:
-        download_photos(chat_id, username, selected_option)
-        context.user_data['total_photos_downloaded'] += selected_option
+        await download_photos(query, context, chat_id, context.user_data['username'], selected_option)
+        new_total = downloaded_photo + selected_option
+        new_update = user_update + 1
 
-# Function to download photos
-def download_photos(chat_id, username, num_photos):
+        # Update the user data in the database
+        c.execute('UPDATE users SET update = ?, downloaded_photo = ? WHERE chatid = ?', (new_update, new_total, chat_id))
+        conn.commit()
+
+# Function to download photos and send to the user
+async def download_photos(query, context, chat_id, username, num_photos):
     # Placeholder function
     # You need to implement this function to download photos from Instagram
-    pass
+    photo_urls = []  # Replace with actual logic to get photo URLs from Instagram
+
+    # Example placeholder URLs (replace these with actual URLs from Instagram)
+    for i in range(num_photos):
+        photo_urls.append(f'https://example.com/photo_{i}.jpg')
+
+    for photo_url in photo_urls:
+        await context.bot.send_photo(chat_id=chat_id, photo=photo_url)
+
+    await query.answer()
+    await query.message.reply_text(f'Downloaded {num_photos} photos.')
 
 # Initialize Flask app
 app = Flask(__name__)
