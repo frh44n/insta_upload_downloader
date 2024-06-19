@@ -3,7 +3,7 @@ import sqlite3
 import os
 from flask import Flask, request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, CallbackQueryHandler, filters
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -33,15 +33,15 @@ def check_instagram_account(username):
     return 'public'
 
 # Command handler for /start
-def start(update: Update, context: CallbackContext) -> None:
+async def start(update: Update, context: CallbackContext) -> None:
     chat_id = update.message.chat_id
     context.user_data['username'] = None
     context.user_data['total_photos_downloaded'] = 0
 
-    update.message.reply_text('Enter Instagram username:')
+    await update.message.reply_text('Enter Instagram username:')
 
 # Message handler to process Instagram username input
-def process_username(update: Update, context: CallbackContext) -> None:
+async def process_username(update: Update, context: CallbackContext) -> None:
     chat_id = update.message.chat_id
     username = update.message.text.strip()
 
@@ -49,14 +49,14 @@ def process_username(update: Update, context: CallbackContext) -> None:
     account_status = check_instagram_account(username)
 
     if account_status == 'not_found':
-        update.message.reply_text('Username not available.')
+        await update.message.reply_text('Username not available.')
     elif account_status == 'private':
-        update.message.reply_text('Downloading data of Private account is not available freely. '
-                                  'Buy premium membership to download data of Private Account.')
+        await update.message.reply_text('Downloading data of Private account is not available freely. '
+                                        'Buy premium membership to download data of Private Account.')
     elif account_status == 'public':
         context.user_data['username'] = username
-        update.message.reply_text('Account is public. How many photos do you want to download?',
-                                  reply_markup=create_inline_keyboard())
+        await update.message.reply_text('Account is public. How many photos do you want to download?',
+                                        reply_markup=create_inline_keyboard())
 
 # Function to create inline keyboard with download options
 def create_inline_keyboard() -> InlineKeyboardMarkup:
@@ -70,7 +70,7 @@ def create_inline_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 # Callback query handler for inline keyboard selection
-def button_click(update: Update, context: CallbackContext) -> None:
+async def button_click(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     selected_option = int(query.data)
 
@@ -79,8 +79,8 @@ def button_click(update: Update, context: CallbackContext) -> None:
     total_photos_downloaded = context.user_data['total_photos_downloaded']
 
     if total_photos_downloaded >= 50:
-        query.answer()
-        query.message.reply_text('Limit exhausted. Please buy premium to download more.')
+        await query.answer()
+        await query.message.reply_text('Limit exhausted. Please buy premium to download more.')
     else:
         download_photos(chat_id, username, selected_option)
         context.user_data['total_photos_downloaded'] += selected_option
@@ -101,23 +101,19 @@ def webhook():
     return 'ok'
 
 def main():
-    # Set up webhook
-    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
-
+    # Set up application
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
     # Add handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, process_username))
-    dispatcher.add_handler(CallbackQueryHandler(button_click))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_username))
+    application.add_handler(CallbackQueryHandler(button_click))
 
     # Start webhook
-    updater.start_webhook(listen='0.0.0.0',
-                          port=8443,
-                          url_path=TELEGRAM_BOT_TOKEN)
-    updater.bot.set_webhook(f'https://insta-upload-downloader.onrender.com/{TELEGRAM_BOT_TOKEN}')
-
-    # Run Flask app
-    app.run(port=8443)
+    application.run_webhook(listen='0.0.0.0',
+                            port=8443,
+                            url_path=TELEGRAM_BOT_TOKEN,
+                            webhook_url=f'https://insta-upload-downloader.onrender.com/{TELEGRAM_BOT_TOKEN}')
 
 if __name__ == '__main__':
     main()
