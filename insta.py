@@ -1,5 +1,4 @@
 import logging
-import sqlite3
 import os
 import requests
 from flask import Flask, request
@@ -10,21 +9,13 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Replace with your Telegram bot token from .env file
+# Replace with your Telegram bot token and group chat ID from .env file
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+GROUP_CHAT_ID = os.getenv('GROUP_CHAT_ID')
 
 # Setup logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Initialize SQLite database
-conn = sqlite3.connect('user_data.db', check_same_thread=False)
-c = conn.cursor()
-
-# Create table if not exists
-c.execute('''CREATE TABLE IF NOT EXISTS users
-             (chatid INTEGER PRIMARY KEY, update INTEGER, downloaded_photo INTEGER)''')
-conn.commit()
 
 # Function to check if Instagram account exists and its privacy status
 def check_instagram_account(username):
@@ -33,23 +24,44 @@ def check_instagram_account(username):
     # For now, let's assume it always returns 'public'
     return 'public'
 
+# Function to retrieve user data from the group chat
+async def get_user_data(context, chat_id):
+    messages = await context.bot.get_chat_history(GROUP_CHAT_ID, limit=100)
+    for message in messages:
+        if str(chat_id) in message.text:
+            return message.text
+    return None
+
+# Function to update user data in the group chat
+async def update_user_data(context, chat_id, update_count, downloaded_photos):
+    messages = await context.bot.get_chat_history(GROUP_CHAT_ID, limit=100)
+    for message in messages:
+        if str(chat_id) in message.text:
+            await context.bot.edit_message_text(
+                chat_id=GROUP_CHAT_ID,
+                message_id=message.message_id,
+                text=f"ChatID: {chat_id}, Update: {update_count}, Downloaded Photos: {downloaded_photos}"
+            )
+            return
+    await context.bot.send_message(
+        chat_id=GROUP_CHAT_ID,
+        text=f"ChatID: {chat_id}, Update: {update_count}, Downloaded Photos: {downloaded_photos}"
+    )
+
 # Command handler for /start
 async def start(update: Update, context: CallbackContext) -> None:
     chat_id = update.message.chat_id
 
-    # Check if user is already in the database
-    c.execute('SELECT update, downloaded_photo FROM users WHERE chatid = ?', (chat_id,))
-    user = c.fetchone()
+    user_data = await get_user_data(context, chat_id)
 
-    if user is None:
-        # Add new user to the database
-        c.execute('INSERT INTO users (chatid, update, downloaded_photo) VALUES (?, ?, ?)', (chat_id, 0, 0))
-        conn.commit()
+    if user_data is None:
         user_update = 0
         downloaded_photo = 0
+        await update_user_data(context, chat_id, user_update, downloaded_photo)
     else:
-        user_update = user[0]
-        downloaded_photo = user[1]
+        user_info = user_data.split(', ')
+        user_update = int(user_info[1].split(': ')[1])
+        downloaded_photo = int(user_info[2].split(': ')[1])
 
     context.user_data['update'] = user_update
     context.user_data['downloaded_photo'] = downloaded_photo
@@ -90,11 +102,10 @@ async def button_click(update: Update, context: CallbackContext) -> None:
     selected_option = int(query.data)
     chat_id = query.message.chat_id
 
-    # Get the user data from the database
-    c.execute('SELECT update, downloaded_photo FROM users WHERE chatid = ?', (chat_id,))
-    user = c.fetchone()
-    user_update = user[0]
-    downloaded_photo = user[1]
+    user_data = await get_user_data(context, chat_id)
+    user_info = user_data.split(', ')
+    user_update = int(user_info[1].split(': ')[1])
+    downloaded_photo = int(user_info[2].split(': ')[1])
 
     if downloaded_photo + selected_option > 50:
         await query.answer()
@@ -104,9 +115,7 @@ async def button_click(update: Update, context: CallbackContext) -> None:
         new_total = downloaded_photo + selected_option
         new_update = user_update + 1
 
-        # Update the user data in the database
-        c.execute('UPDATE users SET update = ?, downloaded_photo = ? WHERE chatid = ?', (new_update, new_total, chat_id))
-        conn.commit()
+        await update_user_data(context, chat_id, new_update, new_total)
 
 # Function to download photos and send to the user
 async def download_photos(query, context, chat_id, username, num_photos):
